@@ -249,8 +249,8 @@ form{padding:12px 24px 24px;display:grid;gap:14px}
   <div class="dlg-h"><h2>Raise a new ticket</h2><button class="x" type="button" id="dlgX" aria-label="Close">&times;</button></div>
   <form id="newForm" novalidate>
     <div class="field">
-      <label for="fTo">To <em>(fixed)</em></label>
-      <input id="fTo" class="fixedto" type="email" readonly tabindex="-1">
+      <label for="fTo">To <em>(the person who will resolve this)</em></label>
+      <select id="fTo"></select>
     </div>
     <div class="field">
       <label for="ccBtn">CC <em>(optional, they get every update)</em></label>
@@ -283,8 +283,17 @@ const CONFIG = {
   GOOGLE_CLIENT_ID: '796828924530-2pdoav30h50e23dbmk93dpqgjjd1d4rm.apps.googleusercontent.com',
   API_URL: 'https://script.google.com/macros/s/AKfycbxmIYcCDt9wBmL5xRGrWEbsC0CnCInWj2Ma7Irk2qr_UUon9s81viWq_VmhoDdIckMcFQ/exec',
   DOMAIN: 'axxela.in',
-  FIXED_TO: 'it.kolkata@axxela.in',
+  TO_LIST: [
+    'it.kolkata@axxela.in',
+    'nisha.mehra@axxela.in',
+    'ashish.kankaria@axxela.in',
+    'saurabh.muklania@axxela.in',
+    'subham.dalmia@axxela.in',
+    'devang.kataria@axxela.in',
+    'kalyan.santra@axxela.in'
+  ],
   CC_LIST: [
+    'it.kolkata@axxela.in',
     'nisha.mehra@axxela.in',
     'ashish.kankaria@axxela.in',
     'saurabh.muklania@axxela.in',
@@ -495,8 +504,8 @@ async function act(action) {
 }
 
 /* ---------- New ticket ---------- */
-const ccOptions = () => CONFIG.CC_LIST.filter(e => e !== S.user.email);
-const nameOf = e => e.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+const ccOptions = () => CONFIG.CC_LIST.filter(e => e !== S.user.email && e !== $('#fTo').value);
+const nameOf = e => e.split('@')[0].split('.').map(w => w === 'it' ? 'IT' : w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 function renderCc() {
   $('#ccMenu').innerHTML = '<div class="ccact"><button type="button" data-ccall>Select all</button><button type="button" data-ccnone>Clear</button></div>' +
     ccOptions().map(e => '<label class="ccopt"><input type="checkbox" data-cc="' + esc(e) + '"' + (S.cc.includes(e) ? ' checked' : '') + '><span>' + esc(nameOf(e)) + '<small>' + esc(e) + '</small></span></label>').join('');
@@ -507,8 +516,12 @@ function toggleCcMenu(open) {
   const m = $('#ccMenu'), o = open === undefined ? m.hidden : open;
   m.hidden = !o; $('#ccBtn').setAttribute('aria-expanded', String(o));
 }
+function fillTo() {
+  $('#fTo').innerHTML = CONFIG.TO_LIST.filter(e => e !== S.user.email)
+    .map(e => '<option value="' + esc(e) + '">' + esc(nameOf(e)) + ' (' + esc(e) + ')</option>').join('');
+}
 function openNew() {
-  $('#newForm').reset(); S.cc = []; $('#fTo').value = CONFIG.FIXED_TO;
+  $('#newForm').reset(); S.cc = []; fillTo();
   renderCc(); toggleCcMenu(false); $('#newErr').hidden = true;
   $('#newDlg').showModal(); $('#fSub').focus();
 }
@@ -546,6 +559,7 @@ document.addEventListener('click', e => {
 });
 $('#q').addEventListener('input', e => { S.q = e.target.value; renderList(); });
 $('#newBtn').addEventListener('click', openNew);
+$('#fTo').addEventListener('change', () => { S.cc = S.cc.filter(e => e !== $('#fTo').value); renderCc(); });
 $('#dlgX').addEventListener('click', () => $('#newDlg').close());
 $('#dlgCancel').addEventListener('click', () => $('#newDlg').close());
 $('#newForm').addEventListener('submit', submitNew);
