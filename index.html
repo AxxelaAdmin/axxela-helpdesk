@@ -153,6 +153,19 @@ form{padding:12px 24px 24px;display:grid;gap:14px}
 .ccbox input{border:0!important;padding:4px!important;flex:1;min-width:170px;border-radius:0!important}
 .tag{display:inline-flex;align-items:center;gap:4px;background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 10px;font-size:12.5px}
 .tag button{background:none;border:0;color:var(--muted);font-size:15px;line-height:1;padding:0 4px}
+.fixedto{background:var(--surface2)!important;color:var(--muted)}
+.ccbtn{width:100%;display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;text-align:left}
+.ccbtn:hover,.ccbtn[aria-expanded=true]{border-color:var(--ink)}
+.ccmenu{border:1px solid var(--line);border-radius:10px;margin-top:6px;max-height:260px;overflow:auto;background:var(--surface)}
+.ccact{display:flex;gap:14px;padding:8px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface)}
+.ccact button{background:none;border:0;color:var(--muted);font-size:12.5px;text-decoration:underline;padding:0}
+.field .ccopt{display:flex;flex-direction:row;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;margin:0;font-size:14px;font-weight:400}
+.ccopt:hover{background:var(--surface2)}
+.ccopt input{width:auto!important;padding:0!important;border:0!important;accent-color:var(--accent)}
+.ccopt span{display:flex;flex-direction:column;line-height:1.3;font-weight:600}
+.ccopt small{color:var(--muted);font-size:12px;font-weight:400}
+.tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.tags:empty{display:none}
 .hint{font-size:12px;color:var(--muted);margin-top:5px}
 .foot{display:flex;justify-content:flex-end;gap:10px;align-items:center;margin-top:4px}
 .foot .err{margin:0 auto 0 0}
@@ -236,13 +249,16 @@ form{padding:12px 24px 24px;display:grid;gap:14px}
   <div class="dlg-h"><h2>Raise a new ticket</h2><button class="x" type="button" id="dlgX" aria-label="Close">&times;</button></div>
   <form id="newForm" novalidate>
     <div class="field">
-      <label for="fTo">To <em>(the person who will resolve this)</em></label>
-      <input id="fTo" type="email" placeholder="name@axxela.in" list="known" autocomplete="off">
-      <datalist id="known"></datalist>
+      <label for="fTo">To <em>(fixed)</em></label>
+      <input id="fTo" class="fixedto" type="email" readonly tabindex="-1">
     </div>
     <div class="field">
-      <label for="ccIn">CC <em>(optional, they get every update)</em></label>
-      <div class="ccbox" id="ccBox"><input id="ccIn" placeholder="Add email and press Enter" list="known" autocomplete="off"></div>
+      <label for="ccBtn">CC <em>(optional, they get every update)</em></label>
+      <div id="ccSel">
+        <button type="button" class="ccbtn" id="ccBtn" aria-expanded="false"><span id="ccLabel">Select CC</span><span aria-hidden="true">&#9662;</span></button>
+        <div class="ccmenu" id="ccMenu" hidden></div>
+      </div>
+      <div class="tags" id="ccTags"></div>
     </div>
     <div class="grid2">
       <div class="field"><label for="fSub">Subject</label><input id="fSub" maxlength="200" placeholder="Short summary of the issue"></div>
@@ -265,8 +281,17 @@ form{padding:12px 24px 24px;display:grid;gap:14px}
 /* ============ CONFIG: fill these 2 values ============ */
 const CONFIG = {
   GOOGLE_CLIENT_ID: '796828924530-2pdoav30h50e23dbmk93dpqgjjd1d4rm.apps.googleusercontent.com',
-  API_URL: 'https://script.google.com/macros/s/AKfycbzu1e1nN57AlgmJFalx0Lu2qEyMVY5K4iTqU_O7Yf5sc1Tf615uxyXceBNsEylzVTDWVQ/exec',
-  DOMAIN: 'axxela.in'
+  API_URL: 'https://script.google.com/macros/s/AKfycbxmIYcCDt9wBmL5xRGrWEbsC0CnCInWj2Ma7Irk2qr_UUon9s81viWq_VmhoDdIckMcFQ/exec',
+  DOMAIN: 'axxela.in',
+  FIXED_TO: 'it.kolkata@axxela.in',
+  CC_LIST: [
+    'nisha.mehra@axxela.in',
+    'ashish.kankaria@axxela.in',
+    'saurabh.muklania@axxela.in',
+    'subham.dalmia@axxela.in',
+    'devang.kataria@axxela.in',
+    'kalyan.santra@axxela.in'
+  ]
 };
 /* ===================================================== */
 
@@ -470,38 +495,28 @@ async function act(action) {
 }
 
 /* ---------- New ticket ---------- */
+const ccOptions = () => CONFIG.CC_LIST.filter(e => e !== S.user.email);
+const nameOf = e => e.split('@')[0].split('.').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 function renderCc() {
-  $$('#ccBox .tag').forEach(n => n.remove());
-  const inp = $('#ccIn');
-  S.cc.forEach(e => {
-    const s = document.createElement('span'); s.className = 'tag';
-    s.innerHTML = esc(e) + '<button type="button" aria-label="Remove ' + esc(e) + '" data-rm="' + esc(e) + '">&times;</button>';
-    $('#ccBox').insertBefore(s, inp);
-  });
+  $('#ccMenu').innerHTML = '<div class="ccact"><button type="button" data-ccall>Select all</button><button type="button" data-ccnone>Clear</button></div>' +
+    ccOptions().map(e => '<label class="ccopt"><input type="checkbox" data-cc="' + esc(e) + '"' + (S.cc.includes(e) ? ' checked' : '') + '><span>' + esc(nameOf(e)) + '<small>' + esc(e) + '</small></span></label>').join('');
+  $('#ccLabel').textContent = S.cc.length ? S.cc.length + ' selected' : 'Select CC';
+  $('#ccTags').innerHTML = S.cc.map(e => '<span class="tag">' + esc(nameOf(e)) + '<button type="button" aria-label="Remove ' + esc(e) + '" data-rm="' + esc(e) + '">&times;</button></span>').join('');
 }
-function addCc(raw) {
-  const err = $('#newErr'); let bad = [];
-  String(raw).split(/[\s,;]+/).filter(Boolean).forEach(x => {
-    x = x.toLowerCase();
-    if (!EMAIL_RE.test(x)) { bad.push(x); return; }
-    if (x !== S.user.email && x !== $('#fTo').value.trim().toLowerCase() && !S.cc.includes(x)) S.cc.push(x);
-  });
-  renderCc();
-  err.hidden = !bad.length; if (bad.length) err.textContent = 'Only @' + CONFIG.DOMAIN + ' emails: ' + bad.join(', ');
-  return !bad.length;
+function toggleCcMenu(open) {
+  const m = $('#ccMenu'), o = open === undefined ? m.hidden : open;
+  m.hidden = !o; $('#ccBtn').setAttribute('aria-expanded', String(o));
 }
 function openNew() {
-  $('#newForm').reset(); S.cc = []; renderCc(); $('#newErr').hidden = true;
-  const known = [...new Set(S.tickets.flatMap(t => [t.raisedBy, t.to, ...t.cc]))].filter(e => e !== S.user.email);
-  $('#known').innerHTML = known.map(e => '<option value="' + esc(e) + '">').join('');
-  $('#newDlg').showModal(); $('#fTo').focus();
+  $('#newForm').reset(); S.cc = []; $('#fTo').value = CONFIG.FIXED_TO;
+  renderCc(); toggleCcMenu(false); $('#newErr').hidden = true;
+  $('#newDlg').showModal(); $('#fSub').focus();
 }
 async function submitNew(ev) {
   ev.preventDefault();
   const err = $('#newErr'); err.hidden = true;
   const fail = m => { err.hidden = false; err.textContent = m; return false; };
   const to = $('#fTo').value.trim().toLowerCase(), sub = $('#fSub').value.trim(), desc = $('#fDesc').value.trim();
-  if ($('#ccIn').value.trim() && !addCc($('#ccIn').value)) return; else $('#ccIn').value = '';
   if (!EMAIL_RE.test(to)) return fail('"To" must be a valid @' + CONFIG.DOMAIN + ' email.');
   if (to === S.user.email) return fail('You cannot assign a ticket to yourself.');
   if (!sub) return fail('Please add a subject.');
@@ -518,6 +533,10 @@ async function submitNew(ev) {
 /* ---------- Events ---------- */
 document.addEventListener('click', e => {
   const t = e.target;
+  if (!t.closest('#ccSel')) toggleCcMenu(false);
+  if (t.closest('#ccBtn')) { toggleCcMenu(); return; }
+  if (t.closest('[data-ccall]')) { S.cc = ccOptions(); renderCc(); return; }
+  if (t.closest('[data-ccnone]')) { S.cc = []; renderCc(); return; }
   const nav = t.closest('.nav'); if (nav) { S.scope = nav.dataset.scope; render(); return; }
   const chip = t.closest('.chip'); if (chip) { S.status = chip.dataset.status; renderChips(); renderList(); return; }
   const row = t.closest('.row'); if (row) { openTicket(row.dataset.id); return; }
@@ -531,11 +550,13 @@ $('#dlgX').addEventListener('click', () => $('#newDlg').close());
 $('#dlgCancel').addEventListener('click', () => $('#newDlg').close());
 $('#newForm').addEventListener('submit', submitNew);
 $('#logout').addEventListener('click', () => signOut());
-$('#ccIn').addEventListener('keydown', e => {
-  if (['Enter', ',', ' ', ';', 'Tab'].includes(e.key) && e.target.value.trim()) { e.preventDefault(); if (addCc(e.target.value)) e.target.value = ''; }
-  else if (e.key === 'Backspace' && !e.target.value && S.cc.length) { S.cc.pop(); renderCc(); }
+document.addEventListener('change', e => {
+  const c = e.target.closest && e.target.closest('[data-cc]');
+  if (!c) return;
+  const v = c.dataset.cc;
+  S.cc = c.checked ? [...new Set([...S.cc, v])] : S.cc.filter(x => x !== v);
+  renderCc();
 });
-$('#ccIn').addEventListener('change', e => { if (e.target.value.trim() && addCc(e.target.value)) e.target.value = ''; });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.openId && !$('#newDlg').open) closeDrawer(); });
 
 /* ---------- Start ---------- */
